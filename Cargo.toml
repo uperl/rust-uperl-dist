@@ -1,0 +1,25 @@
+[package]
+name = "uperl-dist"
+version = "0.1.0"
+edition = "2024"
+description = "CLI tool for step by step installing CPAN distribution"
+repository = "https://github.com/uperl/uperl-dist"
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0.104"
+
+
+[package.metadata.deb]
+maintainer = "Nobody <devnull@wdlabs.com>"
+copyright = "Nobody"
+extended-description = """\
+CLI tool for step by step installing CPAN distribution"""
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/uperl-dist", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/uperl-dist/README.md", "644"],
+    ["LICENSE", "usr/share/doc/uperl-dist/LICENSE", "644"],
+]
+
