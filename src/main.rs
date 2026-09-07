@@ -25,7 +25,9 @@
 //! search path (`-` when it is not installed, `?` when it declares no version).
 //! A module whose installed version does not satisfy the requirement gets a `*`
 //! after its name (and a white-on-red `module` / `installed` cell when colour
-//! is on), with a legend line under the table. This flag is table-only.
+//! is on), with a legend line under the table. `configure` lists only the unmet
+//! prerequisites unless `--all-prereqs` is given; `pre-configure` always lists
+//! all of them. This flag is table-only.
 //!
 //! `--json` replaces all of that with a single JSON object on stdout: the
 //! child's captured, merged stdout+stderr under `output` (the empty string for
@@ -141,12 +143,17 @@ enum Command {
     ///
     /// Afterwards the resolved prerequisites (taken from `MYMETA` when the
     /// configure step wrote one, otherwise from `META`) are printed as a
-    /// `phase` / `relationship` / `module` / `required` / `installed` table,
-    /// unless `--no-prereqs` is given.
+    /// `phase` / `relationship` / `module` / `required` / `installed` table.
+    /// By default only the unmet prerequisites are listed; `--all-prereqs`
+    /// lists every non-`develop` one, and `--no-prereqs` prints none.
     Configure {
         /// Don't print the resolved prerequisites after configuring.
         #[arg(long)]
         no_prereqs: bool,
+
+        /// List every non-`develop` prerequisite, not just the unmet ones.
+        #[arg(long, conflicts_with = "no_prereqs")]
+        all_prereqs: bool,
 
         /// Include `develop`-phase prerequisites in the table (skipped by
         /// default; `--json` always includes them).
@@ -212,6 +219,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::Configure {
             no_prereqs,
+            all_prereqs,
             include_develop,
         } => {
             let (result, deps) = dist
@@ -231,7 +239,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 obj.insert("success".to_string(), json!(result.is_success));
                 print_json(&Value::Object(obj))?;
             } else if !no_prereqs {
-                print_resolved_prereqs_table(&deps, include_develop, &dist.perl);
+                print_resolved_prereqs_table(&deps, include_develop, all_prereqs, &dist.perl);
             }
             Ok(ExitCode::from(code))
         }
@@ -343,11 +351,17 @@ fn resolved_prereqs_json(deps: &Dependencies) -> Value {
 }
 
 /// Print the resolved prerequisites as a `phase` / `relationship` / `module` /
-/// `required` / `installed` table that omits the `develop` phase unless
-/// `include_develop` is set. A module whose installed version does not satisfy
+/// `required` / `installed` table. The `develop` phase is omitted unless
+/// `include_develop` is set; unless `show_all` is set only the unmet
+/// prerequisites are listed. A module whose installed version does not satisfy
 /// the requirement (including "not installed") gets a `*` after its name and,
 /// when colour is enabled, a white-on-red `module` / `installed` cell.
-fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool, perl: &Perl) {
+fn print_resolved_prereqs_table(
+    deps: &Dependencies,
+    include_develop: bool,
+    show_all: bool,
+    perl: &Perl,
+) {
     let color = use_color();
     let mut table = house_style_table();
     table.set_header(header_row([
@@ -358,11 +372,16 @@ fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool, perl
         "installed",
     ]));
     let mut any_unmet = false;
+    let mut rows = 0usize;
     for (phase, relationship, dep) in flatten_prereqs(deps, include_develop) {
         let (installed, satisfied) = installed_status(perl, dep);
         // `conflicts` inverts the sense of "satisfied"; only flag hard needs.
         let flag = !satisfied && matches!(relationship, "requires" | "recommends");
         any_unmet |= flag;
+        if !show_all && !flag {
+            continue;
+        }
+        rows += 1;
         table.add_row([
             Cell::new(phase),
             Cell::new(relationship),
@@ -370,6 +389,11 @@ fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool, perl
             Cell::new(&dep.version),
             red_if(Cell::new(installed), flag && color),
         ]);
+    }
+
+    if !show_all && rows == 0 {
+        println!("all prerequisites are satisfied");
+        return;
     }
     println!("{table}");
     print_unmet_legend(any_unmet);

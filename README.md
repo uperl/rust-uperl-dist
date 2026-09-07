@@ -83,9 +83,12 @@ terminal and `NO_COLOR` is unset) — with a legend line printed under the table
 `configure` prints the resolved prerequisites — from `MYMETA` when the configure
 step wrote one, otherwise from `META` — as a `phase` / `relationship` / `module`
 / `required` / `installed` table (the `perl` row shows the interpreter's own
-`$]` version). Pass `--no-prereqs` to suppress it. The table omits the `develop`
-phase unless `--include-develop` is given; `--json` output always includes it.
-Only `requires` / `recommends` rows are eligible for the `*` flag.
+`$]` version). By default it lists **only the unmet** prerequisites (and prints
+`all prerequisites are satisfied` when there are none); `--all-prereqs` lists
+every non-`develop` one, and `--no-prereqs` suppresses the table entirely. The
+`develop` phase is omitted unless `--include-develop` is given; `--json` output
+always includes every phase. Only `requires` / `recommends` rows are eligible
+for the `*` flag (and so for the default filter).
 
 The `installed` column and the `*` flag are table-only; `--json` output is
 unchanged. Version comparison follows Perl's `version` rules, so `5.010`
