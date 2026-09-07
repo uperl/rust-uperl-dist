@@ -67,15 +67,15 @@ interpreter's search path (`-` = not installed, `?` = installed but declares no
 version). A module is marked with a trailing `*` when its installed version does
 not satisfy the required range (including when it is absent) — and its `module` /
 `installed` cells are shown white-on-red when colour is enabled (stdout is a
-terminal and `NO_COLOR` is unset) — with a legend line printed under the table:
+terminal and `NO_COLOR` is unset) — with a legend line printed under the table.
+By default only the unmet prerequisites are listed (`all prerequisites are
+satisfied` when there are none); `--all-prereqs` lists every one:
 
 ```
 ┌───────────────────────┬──────────┬───────────┐
 │ module                ┆ required ┆ installed │
 ╞═══════════════════════╪══════════╪═══════════╡
 │ ExtUtils::MakeMaker * ┆ 999.0    ┆ 7.76      │
-├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌┤
-│ File::Which           ┆ 1.09     ┆ 1.27      │
 └───────────────────────┴──────────┴───────────┘
 * required version not satisfied by the installed version
 ```

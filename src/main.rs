@@ -25,9 +25,10 @@
 //! search path (`-` when it is not installed, `?` when it declares no version).
 //! A module whose installed version does not satisfy the requirement gets a `*`
 //! after its name (and a white-on-red `module` / `installed` cell when colour
-//! is on), with a legend line under the table. `configure` lists only the unmet
-//! prerequisites unless `--all-prereqs` is given; `pre-configure` always lists
-//! all of them. This flag is table-only.
+//! is on), with a legend line under the table. Both `pre-configure` and
+//! `configure` list only the unmet prerequisites unless `--all-prereqs` is
+//! given, and print `all prerequisites are satisfied` when there are none. This
+//! flag is table-only.
 //!
 //! `--json` replaces all of that with a single JSON object on stdout: the
 //! child's captured, merged stdout+stderr under `output` (the empty string for
@@ -136,8 +137,13 @@ impl From<Prefer> for BuildTool {
 enum Command {
     /// Print the prerequisites that must be installed before `configure` can run
     /// (the distribution's `configure` requires, plus the build tool itself), as
-    /// a `module` / `required` / `installed` table. Nothing is executed.
-    PreConfigure,
+    /// a `module` / `required` / `installed` table. By default only the unmet
+    /// ones are listed; `--all-prereqs` lists all of them. Nothing is executed.
+    PreConfigure {
+        /// List every prerequisite, not just the unmet ones.
+        #[arg(long)]
+        all_prereqs: bool,
+    },
 
     /// Run the configure step: `perl Makefile.PL` or `perl Build.PL`.
     ///
@@ -202,7 +208,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         })?;
 
     match command {
-        Command::PreConfigure => {
+        Command::PreConfigure { all_prereqs } => {
             let deps = dist.execute_pre_configure();
             if common.json {
                 // `pre-configure` runs nothing: empty output, always successful.
@@ -213,7 +219,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
                     "success": true,
                 }))?;
             } else {
-                print_pre_configure_table(&deps, &dist.perl);
+                print_pre_configure_table(&deps, all_prereqs, &dist.perl);
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -309,23 +315,34 @@ fn pre_configure_prereqs_json(deps: &[Dependency]) -> Value {
 }
 
 /// Print the pre-configure prerequisites as a `module` / `required` /
-/// `installed` table. A module whose installed version does not satisfy the
-/// requirement (including "not installed") gets a `*` after its name and, when
-/// colour is enabled, a white-on-red `module` / `installed` cell.
-fn print_pre_configure_table(deps: &[Dependency], perl: &Perl) {
+/// `installed` table. Unless `show_all` is set only the unmet prerequisites are
+/// listed. A module whose installed version does not satisfy the requirement
+/// (including "not installed") gets a `*` after its name and, when colour is
+/// enabled, a white-on-red `module` / `installed` cell.
+fn print_pre_configure_table(deps: &[Dependency], show_all: bool, perl: &Perl) {
     let color = use_color();
     let mut table = house_style_table();
     table.set_header(header_row(["module", "required", "installed"]));
     let mut any_unmet = false;
+    let mut rows = 0usize;
     for dep in deps {
         let (installed, satisfied) = installed_status(perl, dep);
         any_unmet |= !satisfied;
+        if !show_all && satisfied {
+            continue;
+        }
+        rows += 1;
         let unmet = !satisfied && color;
         table.add_row([
             red_if(Cell::new(module_cell(&dep.module, satisfied)), unmet),
             Cell::new(&dep.version),
             red_if(Cell::new(installed), unmet),
         ]);
+    }
+
+    if !show_all && rows == 0 {
+        println!("all prerequisites are satisfied");
+        return;
     }
     println!("{table}");
     print_unmet_legend(any_unmet);
