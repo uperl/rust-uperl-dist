@@ -87,8 +87,9 @@ struct CommonArgs {
     #[arg(long, global = true, value_name = "TOOL", default_value_t = Prefer::Mb)]
     prefer: Prefer,
 
-    /// Print computed prerequisites as JSON instead of a table (`pre-configure`
-    /// and `configure`).
+    /// Emit a single JSON object on stdout instead of tables and live output:
+    /// the captured command `output`, plus `prereqs` for `pre-configure` and
+    /// `configure`.
     #[arg(long, short = 'j', global = true)]
     json: bool,
 }
