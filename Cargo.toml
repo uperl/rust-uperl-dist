@@ -1,6 +1,6 @@
 [package]
 name = "uperl-dist"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "CLI tool for step by step installing CPAN distribution"
 repository = "https://github.com/uperl/uperl-dist"
@@ -8,11 +8,15 @@ license = "MIT"
 
 [dependencies]
 anyhow = "1.0.104"
+clap = { version = "4.5", features = ["derive"] }
+comfy-table = "7"
+cpan-distribution-build = { git = "https://github.com/uperl/rust-cpan-distribution-build.git", tag = "v0.2.1" }
+serde_json = { version = "1", features = ["preserve_order"] }
 
 
 [package.metadata.deb]
-maintainer = "Nobody <devnull@wdlabs.com>"
-copyright = "Nobody"
+maintainer = "Graham Ollis <devnull@wdlabs.com>"
+copyright = "Graham Ollis"
 extended-description = """\
 CLI tool for step by step installing CPAN distribution"""
 section = "utils"
