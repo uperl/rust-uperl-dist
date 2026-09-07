@@ -83,9 +83,10 @@ a panic.
 
 `--json` (`-j`) works with every subcommand. It prints a single JSON object on
 stdout and nothing else — the child's output is captured rather than streamed,
-so stdout stays valid JSON. The object always has an `output` key holding the
-child's merged stdout+stderr (`""` for `pre-configure`, which runs nothing), and
-`pre-configure` / `configure` add a `prereqs` object keyed by phase:
+so stdout stays valid JSON. The object always has `output` (the child's merged
+stdout+stderr; `""` for `pre-configure`, which runs nothing), `exit` (the
+numeric exit code) and `success` (a boolean); `pre-configure` / `configure` also
+add a `prereqs` object keyed by phase:
 
 ```json
 {
@@ -96,12 +97,14 @@ child's merged stdout+stderr (`""` for `pre-configure`, which runs nothing), and
     "runtime": [ { "relationship": "requires", "module": "perl", "version": "5.010" } ],
     "develop": []
   },
-  "output": "Generating a Unix-style Makefile\n..."
+  "output": "Generating a Unix-style Makefile\n...",
+  "exit": 0,
+  "success": true
 }
 ```
 
 `configure` emits all five CPAN phases (empty ones as `[]`, `develop` always
 included regardless of `--include-develop`); `pre-configure` emits only
-`configure`, with `module` / `version` entries. `build`, `test` and `install`
-emit just `{ "output": ... }`. `--no-prereqs` drops the `prereqs` key from
-`configure`'s object.
+`configure`, with `module` / `version` entries, and always reports `exit` 0 /
+`success` true. `build`, `test` and `install` emit just `output` / `exit` /
+`success`. `--no-prereqs` drops the `prereqs` key from `configure`'s object.

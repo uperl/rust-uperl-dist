@@ -21,10 +21,11 @@
 //! by default as a `comfy-table` in the same house style as `uperl-metacpan`.
 //!
 //! `--json` replaces all of that with a single JSON object on stdout: the
-//! child's captured, merged stdout+stderr under an `output` key (the empty
-//! string for `pre-configure`, which runs nothing), plus a `prereqs` object for
-//! `pre-configure` and `configure`. The child's output is captured rather than
-//! streamed in this mode, so stdout stays valid JSON.
+//! child's captured, merged stdout+stderr under `output` (the empty string for
+//! `pre-configure`, which runs nothing), the numeric `exit` code and a boolean
+//! `success`, plus a `prereqs` object for `pre-configure` and `configure`. The
+//! child's output is captured rather than streamed in this mode, so stdout stays
+//! valid JSON. `pre-configure` always reports `exit` 0 and `success` true.
 
 use std::io::IsTerminal;
 use std::path::PathBuf;
@@ -183,10 +184,12 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Command::PreConfigure => {
             let deps = dist.execute_pre_configure();
             if common.json {
-                // `pre-configure` runs nothing, so its captured output is empty.
+                // `pre-configure` runs nothing: empty output, always successful.
                 print_json(&json!({
                     "prereqs": pre_configure_prereqs_json(&deps),
                     "output": "",
+                    "exit": 0,
+                    "success": true,
                 }))?;
             } else {
                 print_pre_configure_table(&deps);
@@ -200,6 +203,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
             let (result, deps) = dist
                 .execute_configure()
                 .context("the configure step could not be started")?;
+            let code = step_exit_code("configure", &result);
             if common.json {
                 let mut obj = serde_json::Map::new();
                 if !no_prereqs {
@@ -209,11 +213,13 @@ fn run(cli: Cli) -> Result<ExitCode> {
                     "output".to_string(),
                     Value::String(captured_output(&result)),
                 );
+                obj.insert("exit".to_string(), json!(code));
+                obj.insert("success".to_string(), json!(result.is_success));
                 print_json(&Value::Object(obj))?;
             } else if !no_prereqs {
                 print_resolved_prereqs_table(&deps, include_develop);
             }
-            Ok(exit_code_for("configure", &result))
+            Ok(ExitCode::from(code))
         }
         Command::Build => finish_step("build", &common, dist.execute_build()?),
         Command::Test => finish_step("test", &common, dist.execute_test()?),
@@ -224,10 +230,15 @@ fn run(cli: Cli) -> Result<ExitCode> {
 /// Emit the JSON envelope for a bare build step when `--json` is set, then map
 /// the [`ExecuteResult`] to a process exit code.
 fn finish_step(step: &str, common: &CommonArgs, result: ExecuteResult) -> Result<ExitCode> {
+    let code = step_exit_code(step, &result);
     if common.json {
-        print_json(&json!({ "output": captured_output(&result) }))?;
+        print_json(&json!({
+            "output": captured_output(&result),
+            "exit": code,
+            "success": result.is_success,
+        }))?;
     }
-    Ok(exit_code_for(step, &result))
+    Ok(ExitCode::from(code))
 }
 
 /// The child's captured, merged stdout+stderr as a lossy UTF-8 string, or `""`
@@ -410,21 +421,24 @@ fn print_json(value: &Value) -> Result<()> {
     Ok(())
 }
 
-/// Map an [`ExecuteResult`] to a process exit code, reporting failures on stderr.
-fn exit_code_for(step: &str, result: &ExecuteResult) -> ExitCode {
+/// The exit code this process should use for `step`'s [`ExecuteResult`],
+/// reporting failures on stderr as a side effect. `0` on success; the child's
+/// code (coerced into `1..=255`) on a non-zero exit; `1` when it was killed by a
+/// signal.
+fn step_exit_code(step: &str, result: &ExecuteResult) -> u8 {
     if result.is_success {
-        return ExitCode::SUCCESS;
+        return 0;
     }
 
     match result.code {
         Some(code) => {
             eprintln!("uperl-dist: the {step} step exited with status {code}");
             let byte = u8::try_from(code).unwrap_or(1);
-            ExitCode::from(if byte == 0 { 1 } else { byte })
+            if byte == 0 { 1 } else { byte }
         }
         None => {
             eprintln!("uperl-dist: the {step} step was terminated by a signal");
-            ExitCode::FAILURE
+            1
         }
     }
 }
