@@ -64,25 +64,31 @@ uperl-dist distclean                     # also remove the generated Makefile / 
 `configure` requires plus the build tool itself) as a table in the same style as
 `uperl-metacpan`, with the required range next to the version found on the
 interpreter's search path (`-` = not installed, `?` = installed but declares no
-version):
+version). A module is marked with a trailing `*` when its installed version does
+not satisfy the required range (including when it is absent), and a legend line
+is printed under the table:
 
 ```
-┌─────────────────────┬──────────┬───────────┐
-│ module              ┆ required ┆ installed │
-╞═════════════════════╪══════════╪═══════════╡
-│ ExtUtils::MakeMaker ┆ 0        ┆ 7.76      │
-├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌┤
-│ File::Which         ┆ 1.09     ┆ 1.27      │
-└─────────────────────┴──────────┴───────────┘
+┌───────────────────────┬──────────┬───────────┐
+│ module                ┆ required ┆ installed │
+╞═══════════════════════╪══════════╪═══════════╡
+│ ExtUtils::MakeMaker * ┆ 999.0    ┆ 7.76      │
+├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌┤
+│ File::Which           ┆ 1.09     ┆ 1.27      │
+└───────────────────────┴──────────┴───────────┘
+* required version not satisfied by the installed version
 ```
 
 `configure` prints the resolved prerequisites — from `MYMETA` when the configure
 step wrote one, otherwise from `META` — as a `phase` / `relationship` / `module`
-/ `required` / `installed` table. Pass `--no-prereqs` to suppress it. The table
-omits the `develop` phase unless `--include-develop` is given; `--json` output
-always includes it.
+/ `required` / `installed` table (the `perl` row shows the interpreter's own
+`$]` version). Pass `--no-prereqs` to suppress it. The table omits the `develop`
+phase unless `--include-develop` is given; `--json` output always includes it.
+Only `requires` / `recommends` rows are eligible for the `*` flag.
 
-The `installed` column is table-only; `--json` output is unchanged.
+The `installed` column and the `*` flag are table-only; `--json` output is
+unchanged. Version comparison follows Perl's `version` rules, so `5.010`
+compares as `v5.10.0` (and a decimal's trailing zeros are significant).
 
 Every subcommand except `pre-configure` passes `perl` / `make` output straight
 through and exits with the child's status; a failing step is a non-zero exit,

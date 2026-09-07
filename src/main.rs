@@ -23,6 +23,8 @@
 //! by default as a `comfy-table` in the same house style as `uperl-metacpan`,
 //! with an `installed` column giving each module's version on `dist.perl`'s
 //! search path (`-` when it is not installed, `?` when it declares no version).
+//! A module whose installed version does not satisfy the requirement gets a `*`
+//! after its name, with a legend line under the table. This flag is table-only.
 //!
 //! `--json` replaces all of that with a single JSON object on stdout: the
 //! child's captured, merged stdout+stderr under `output` (the empty string for
@@ -298,18 +300,23 @@ fn pre_configure_prereqs_json(deps: &[Dependency]) -> Value {
 }
 
 /// Print the pre-configure prerequisites as a `module` / `required` /
-/// `installed` table.
+/// `installed` table. A module whose installed version does not satisfy the
+/// requirement (including "not installed") gets a `*` after its name.
 fn print_pre_configure_table(deps: &[Dependency], perl: &Perl) {
     let mut table = house_style_table();
     table.set_header(header_row(["module", "required", "installed"]));
+    let mut any_unmet = false;
     for dep in deps {
+        let (installed, satisfied) = installed_status(perl, dep);
+        any_unmet |= !satisfied;
         table.add_row([
-            Cell::new(&dep.module),
+            Cell::new(module_cell(&dep.module, satisfied)),
             Cell::new(&dep.version),
-            Cell::new(installed_version(perl, &dep.module)),
+            Cell::new(installed),
         ]);
     }
     println!("{table}");
+    print_unmet_legend(any_unmet);
 }
 
 /// The resolved prerequisites as the full picture:
@@ -333,7 +340,8 @@ fn resolved_prereqs_json(deps: &Dependencies) -> Value {
 
 /// Print the resolved prerequisites as a `phase` / `relationship` / `module` /
 /// `required` / `installed` table that omits the `develop` phase unless
-/// `include_develop` is set.
+/// `include_develop` is set. A module whose installed version does not satisfy
+/// the requirement (including "not installed") gets a `*` after its name.
 fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool, perl: &Perl) {
     let mut table = house_style_table();
     table.set_header(header_row([
@@ -343,26 +351,196 @@ fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool, perl
         "required",
         "installed",
     ]));
+    let mut any_unmet = false;
     for (phase, relationship, dep) in flatten_prereqs(deps, include_develop) {
+        let (installed, satisfied) = installed_status(perl, dep);
+        // `conflicts` inverts the sense of "satisfied"; only flag hard needs.
+        let flag = !satisfied && matches!(relationship, "requires" | "recommends");
+        any_unmet |= flag;
         table.add_row([
             Cell::new(phase),
             Cell::new(relationship),
-            Cell::new(&dep.module),
+            Cell::new(module_cell(&dep.module, !flag)),
             Cell::new(&dep.version),
-            Cell::new(installed_version(perl, &dep.module)),
+            Cell::new(installed),
         ]);
     }
     println!("{table}");
+    print_unmet_legend(any_unmet);
 }
 
-/// The version of `module` installed on `perl`'s module search path, for the
-/// table's `installed` column: the `$VERSION` declared in its source, `"?"` when
-/// it is installed but declares none, or `"-"` when it is not installed.
-fn installed_version(perl: &Perl, module: &str) -> String {
-    match perl.module(module) {
-        Some(found) => found.version.unwrap_or_else(|| "?".to_string()),
-        None => "-".to_string(),
+/// The `installed` column value for `dep` and whether it satisfies `dep`'s
+/// required range. The value is the `$VERSION` declared in the module's source,
+/// `"?"` when it is installed but declares none, or `"-"` when it is not
+/// installed; a missing module never satisfies the requirement.
+///
+/// The `perl` pseudo-prerequisite is special-cased to the interpreter's own
+/// version (`$]`) rather than a `perl.pm` lookup.
+fn installed_status(perl: &Perl, dep: &Dependency) -> (String, bool) {
+    if dep.module == "perl" {
+        return match interpreter_version(perl) {
+            Some(version) => {
+                let satisfied = version_satisfies(&dep.version, &version);
+                (version, satisfied)
+            }
+            // Could not ask the interpreter its version; don't flag it.
+            None => ("-".to_string(), true),
+        };
     }
+
+    match perl.module(&dep.module) {
+        None => ("-".to_string(), false),
+        Some(found) => match found.version {
+            Some(version) => {
+                let satisfied = version_satisfies(&dep.version, &version);
+                (version, satisfied)
+            }
+            // Installed but no recoverable version: satisfied only if any version
+            // will do.
+            None => ("?".to_string(), version_satisfies(&dep.version, "")),
+        },
+    }
+}
+
+/// The running interpreter's version string (`perl -e 'print $]'`, e.g.
+/// `5.042003`), or `None` when it cannot be queried.
+fn interpreter_version(perl: &Perl) -> Option<String> {
+    let output = perl
+        .perl_command()
+        .arg("-e")
+        .arg("print $]")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!version.is_empty()).then_some(version)
+}
+
+/// A `module` cell: the name, with a trailing ` *` when `satisfied` is false.
+fn module_cell(name: &str, satisfied: bool) -> String {
+    if satisfied {
+        name.to_string()
+    } else {
+        format!("{name} *")
+    }
+}
+
+/// Print the `*` legend under a table when it flagged at least one row.
+fn print_unmet_legend(any_unmet: bool) {
+    if any_unmet {
+        println!("* required version not satisfied by the installed version");
+    }
+}
+
+/// Returns `true` when `installed` satisfies the CPAN prerequisite version range
+/// `required`.
+///
+/// `required` is a CPAN Meta version range: a bare version means "at least that"
+/// (`0` or empty means any version), and comma-separated `>=`, `>`, `<=`, `<`,
+/// `==`, `!=` clauses are ANDed. Versions are compared the way Perl's `version`
+/// module does — a decimal version such as `5.010` is read as `v5.10.0`, its
+/// fractional part split into 3-digit groups (the last zero-padded), while a
+/// `v`-string or a version with two or more dots is compared component-wise.
+///
+/// An `installed` string that cannot be parsed never satisfies a non-empty
+/// range; an empty range (or just `0`) is always satisfied.
+fn version_satisfies(required: &str, installed: &str) -> bool {
+    use std::cmp::Ordering;
+
+    let clauses: Vec<(&str, &str)> = required
+        .split(',')
+        .filter_map(|clause| {
+            let clause = clause.trim();
+            if clause.is_empty() {
+                return None;
+            }
+            for op in ["<=", ">=", "==", "!=", "<", ">"] {
+                if let Some(rest) = clause.strip_prefix(op) {
+                    return Some((op, rest.trim()));
+                }
+            }
+            if clause == "0" {
+                return None; // "any version" marker
+            }
+            Some((">=", clause)) // bare version means "at least"
+        })
+        .collect();
+
+    if clauses.is_empty() {
+        return true;
+    }
+
+    let Some(installed) = parse_perl_version(installed) else {
+        return false;
+    };
+
+    clauses.iter().all(|(op, req)| {
+        let Some(req) = parse_perl_version(req) else {
+            return true; // ignore a clause we can't parse, as the CPAN parser does
+        };
+        let ord = cmp_versions(&installed, &req);
+        match *op {
+            "<" => ord == Ordering::Less,
+            "<=" => ord != Ordering::Greater,
+            ">" => ord == Ordering::Greater,
+            ">=" => ord != Ordering::Less,
+            "==" => ord == Ordering::Equal,
+            "!=" => ord != Ordering::Equal,
+            _ => true,
+        }
+    })
+}
+
+/// Parse a Perl version string into comparable integer components, following
+/// `version.pm`: a leading `v` or two-plus dots means dotted-decimal (each
+/// segment is one component); otherwise it is a decimal version whose fractional
+/// digits are grouped in threes, the final group right-padded with zeros
+/// (`5.010` -> `[5, 10]`, `1.302210` -> `[1, 302, 210]`). `_` (alpha releases)
+/// is stripped. `None` if the string isn't a version.
+fn parse_perl_version(raw: &str) -> Option<Vec<u64>> {
+    let trimmed = raw.trim();
+    let dotted = trimmed.starts_with(['v', 'V']);
+    let body: String = trimmed
+        .trim_start_matches(['v', 'V'])
+        .chars()
+        .filter(|c| *c != '_')
+        .collect();
+    if body.is_empty() {
+        return None;
+    }
+
+    if dotted || body.matches('.').count() >= 2 {
+        return body.split('.').map(|seg| seg.parse::<u64>().ok()).collect();
+    }
+
+    let mut it = body.splitn(2, '.');
+    let mut parts = vec![it.next().unwrap_or("0").parse::<u64>().ok()?];
+    if let Some(frac) = it.next().filter(|f| !f.is_empty()) {
+        for chunk in frac.as_bytes().chunks(3) {
+            let mut group = String::from_utf8_lossy(chunk).into_owned();
+            while group.len() < 3 {
+                group.push('0');
+            }
+            parts.push(group.parse::<u64>().ok()?);
+        }
+    }
+    Some(parts)
+}
+
+/// Compare two version-component vectors element-wise, missing trailing
+/// components counting as 0.
+fn cmp_versions(a: &[u64], b: &[u64]) -> std::cmp::Ordering {
+    (0..a.len().max(b.len()))
+        .map(|i| {
+            a.get(i)
+                .copied()
+                .unwrap_or(0)
+                .cmp(&b.get(i).copied().unwrap_or(0))
+        })
+        .find(|o| o.is_ne())
+        .unwrap_or(std::cmp::Ordering::Equal)
 }
 
 /// The `{ "relationship", "module", "version" }` entries of one phase, in a
@@ -476,5 +654,81 @@ fn step_exit_code(step: &str, result: &ExecuteResult) -> u8 {
             eprintln!("uperl-dist: the {step} step was terminated by a signal");
             1
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{cmp_versions, parse_perl_version, version_satisfies};
+    use std::cmp::Ordering;
+
+    #[test]
+    fn perl_decimal_versions_split_into_three_digit_groups() {
+        assert_eq!(parse_perl_version("5.010"), Some(vec![5, 10]));
+        assert_eq!(parse_perl_version("1.302210"), Some(vec![1, 302, 210]));
+        assert_eq!(parse_perl_version("1.23"), Some(vec![1, 230]));
+        assert_eq!(parse_perl_version("7"), Some(vec![7]));
+        // `_` (alpha releases) is dropped.
+        assert_eq!(parse_perl_version("1.23_01"), Some(vec![1, 230, 100]));
+    }
+
+    #[test]
+    fn perl_dotted_versions_compare_component_wise() {
+        assert_eq!(parse_perl_version("v5.10.0"), Some(vec![5, 10, 0]));
+        assert_eq!(parse_perl_version("1.2.3"), Some(vec![1, 2, 3]));
+        assert_eq!(
+            cmp_versions(
+                &parse_perl_version("v5.10.1").unwrap(),
+                &parse_perl_version("v5.10.0").unwrap()
+            ),
+            Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn non_versions_do_not_parse() {
+        assert_eq!(parse_perl_version(""), None);
+        assert_eq!(parse_perl_version("undef"), None);
+        assert_eq!(parse_perl_version("1.x"), None);
+    }
+
+    #[test]
+    fn any_version_range_is_always_satisfied() {
+        assert!(version_satisfies("0", "1.0"));
+        assert!(version_satisfies("", "0.01"));
+        assert!(version_satisfies("0", "anything"));
+    }
+
+    #[test]
+    fn bare_version_means_at_least() {
+        assert!(version_satisfies("1.09", "1.27"));
+        assert!(version_satisfies("1.09", "1.09"));
+        assert!(!version_satisfies("1.09", "1.05"));
+        assert!(version_satisfies("6.58", "7.76"));
+    }
+
+    #[test]
+    fn perl_decimal_gotchas() {
+        // 5.10 normalises to v5.100.0, which is newer than 5.010 (v5.10.0).
+        assert!(version_satisfies("5.010", "5.10"));
+        assert!(!version_satisfies("5.10", "5.010"));
+    }
+
+    #[test]
+    fn anded_operator_clauses() {
+        assert!(version_satisfies(">= 1.2, < 2.0", "1.5"));
+        assert!(!version_satisfies(">= 1.2, < 2.0", "2.5"));
+        assert!(!version_satisfies(">= 1.2, < 2.0", "1.1"));
+        assert!(!version_satisfies("!= 1.5", "1.5"));
+        assert!(version_satisfies("!= 1.5", "1.6"));
+        assert!(version_satisfies("== 1.302210", "1.302210"));
+        assert!(!version_satisfies("== 1.302210", "1.302211"));
+    }
+
+    #[test]
+    fn unparseable_installed_never_satisfies_a_real_range() {
+        assert!(!version_satisfies("1.0", ""));
+        assert!(!version_satisfies("1.0", "undef"));
+        assert!(!version_satisfies(">= 1.2", "?"));
     }
 }
