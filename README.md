@@ -65,11 +65,11 @@ uperl-dist distclean                     # also remove the generated Makefile / 
 `uperl-metacpan`, with the required range next to the version found on the
 interpreter's search path (`-` = not installed, `?` = installed but declares no
 version). A module is marked with a trailing `*` when its installed version does
-not satisfy the required range (including when it is absent) — and its `module` /
-`installed` cells are shown white-on-red when colour is enabled (stdout is a
-terminal and `NO_COLOR` is unset) — with a legend line printed under the table.
-By default only the unmet prerequisites are listed (`all prerequisites are
-satisfied` when there are none); `--all-prereqs` lists every one:
+not satisfy the required range (including when it is absent); when colour is
+enabled (stdout is a terminal and `NO_COLOR` is unset) its `module` / `installed`
+cells are highlighted — white-on-red — and a legend line is printed under the
+table. By default only the unmet prerequisites are listed (`all prerequisites
+are satisfied` when there are none); `--all-prereqs` lists every one:
 
 ```
 ┌───────────────────────┬──────────┬───────────┐
@@ -77,7 +77,7 @@ satisfied` when there are none); `--all-prereqs` lists every one:
 ╞═══════════════════════╪══════════╪═══════════╡
 │ ExtUtils::MakeMaker * ┆ 999.0    ┆ 7.76      │
 └───────────────────────┴──────────┴───────────┘
-* required version not satisfied by the installed version
+* installed version does not satisfy the requirement
 ```
 
 `configure` prints the resolved prerequisites — from `MYMETA` when the configure
@@ -87,8 +87,10 @@ step wrote one, otherwise from `META` — as a `phase` / `relationship` / `modul
 `all prerequisites are satisfied` when there are none); `--all-prereqs` lists
 every non-`develop` one, and `--no-prereqs` suppresses the table entirely. The
 `develop` phase is omitted unless `--include-develop` is given; `--json` output
-always includes every phase. Only `requires` / `recommends` rows are eligible
-for the `*` flag (and so for the default filter).
+always includes every phase. `requires`, `recommends` and `suggests` rows are
+eligible for the `*` flag (and the default filter); `conflicts` is never
+flagged. When colour is on the highlight tracks severity: **white-on-red** for a
+hard `requires`, **black-on-yellow** for an optional `recommends` / `suggests`.
 
 The `installed` column and the `*` flag are table-only; `--json` output is
 unchanged. Version comparison follows Perl's `version` rules, so `5.010`

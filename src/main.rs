@@ -24,11 +24,12 @@
 //! with an `installed` column giving each module's version on `dist.perl`'s
 //! search path (`-` when it is not installed, `?` when it declares no version).
 //! A module whose installed version does not satisfy the requirement gets a `*`
-//! after its name (and a white-on-red `module` / `installed` cell when colour
-//! is on), with a legend line under the table. Both `pre-configure` and
-//! `configure` list only the unmet prerequisites unless `--all-prereqs` is
-//! given, and print `all prerequisites are satisfied` when there are none. This
-//! flag is table-only.
+//! after its name — with coloured `module` / `installed` cells when colour is
+//! on: white on red for a hard `requires`, black on yellow for an optional
+//! `recommends` / `suggests` — and a legend line under the table. Both
+//! `pre-configure` and `configure` list only the unmet prerequisites unless
+//! `--all-prereqs` is given, and print `all prerequisites are satisfied` when
+//! there are none. This flag is table-only.
 //!
 //! `--json` replaces all of that with a single JSON object on stdout: the
 //! child's captured, merged stdout+stderr under `output` (the empty string for
@@ -332,11 +333,12 @@ fn print_pre_configure_table(deps: &[Dependency], show_all: bool, perl: &Perl) {
             continue;
         }
         rows += 1;
-        let unmet = !satisfied && color;
+        // Pre-configure prerequisites are all hard configure requirements.
+        let style = (!satisfied && color).then_some((Color::White, Color::Red));
         table.add_row([
-            red_if(Cell::new(module_cell(&dep.module, satisfied)), unmet),
+            paint(Cell::new(module_cell(&dep.module, satisfied)), style),
             Cell::new(&dep.version),
-            red_if(Cell::new(installed), unmet),
+            paint(Cell::new(installed), style),
         ]);
     }
 
@@ -372,7 +374,8 @@ fn resolved_prereqs_json(deps: &Dependencies) -> Value {
 /// `include_develop` is set; unless `show_all` is set only the unmet
 /// prerequisites are listed. A module whose installed version does not satisfy
 /// the requirement (including "not installed") gets a `*` after its name and,
-/// when colour is enabled, a white-on-red `module` / `installed` cell.
+/// when colour is enabled, coloured `module` / `installed` cells: white on red
+/// for `requires`, black on yellow for the optional `recommends` / `suggests`.
 fn print_resolved_prereqs_table(
     deps: &Dependencies,
     include_develop: bool,
@@ -392,19 +395,24 @@ fn print_resolved_prereqs_table(
     let mut rows = 0usize;
     for (phase, relationship, dep) in flatten_prereqs(deps, include_develop) {
         let (installed, satisfied) = installed_status(perl, dep);
-        // `conflicts` inverts the sense of "satisfied"; only flag hard needs.
-        let flag = !satisfied && matches!(relationship, "requires" | "recommends");
+        // `conflicts` has inverted semantics, so it is never flagged.
+        let flag = !satisfied && matches!(relationship, "requires" | "recommends" | "suggests");
         any_unmet |= flag;
         if !show_all && !flag {
             continue;
         }
         rows += 1;
+        let style = if flag && color {
+            unmet_style(relationship)
+        } else {
+            None
+        };
         table.add_row([
             Cell::new(phase),
             Cell::new(relationship),
-            red_if(Cell::new(module_cell(&dep.module, !flag)), flag && color),
+            paint(Cell::new(module_cell(&dep.module, !flag)), style),
             Cell::new(&dep.version),
-            red_if(Cell::new(installed), flag && color),
+            paint(Cell::new(installed), style),
         ]);
     }
 
@@ -475,13 +483,22 @@ fn module_cell(name: &str, satisfied: bool) -> String {
     }
 }
 
-/// Give `cell` a red background with white text when `red` is set, otherwise
-/// leave it as is.
-fn red_if(cell: Cell, red: bool) -> Cell {
-    if red {
-        cell.fg(Color::White).bg(Color::Red)
-    } else {
-        cell
+/// Apply an optional `(foreground, background)` style to `cell`.
+fn paint(cell: Cell, style: Option<(Color, Color)>) -> Cell {
+    match style {
+        Some((fg, bg)) => cell.fg(fg).bg(bg),
+        None => cell,
+    }
+}
+
+/// The highlight for an *unmet* prerequisite of the given relationship: white on
+/// red for a hard `requires`, black on yellow for the softer `recommends` /
+/// `suggests`, and none for `conflicts` (its "satisfied" sense is inverted).
+fn unmet_style(relationship: &str) -> Option<(Color, Color)> {
+    match relationship {
+        "requires" => Some((Color::White, Color::Red)),
+        "recommends" | "suggests" => Some((Color::Black, Color::Yellow)),
+        _ => None,
     }
 }
 
@@ -494,7 +511,7 @@ fn use_color() -> bool {
 /// Print the `*` legend under a table when it flagged at least one row.
 fn print_unmet_legend(any_unmet: bool) {
     if any_unmet {
-        println!("* required version not satisfied by the installed version");
+        println!("* installed version does not satisfy the requirement");
     }
 }
 
