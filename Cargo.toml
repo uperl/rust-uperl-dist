@@ -10,7 +10,7 @@ license = "MIT"
 anyhow = "1.0.104"
 clap = { version = "4.5", features = ["derive"] }
 comfy-table = "7"
-cpan-distribution-build = { git = "https://github.com/uperl/rust-cpan-distribution-build.git", tag = "v0.2.0" }
+cpan-distribution-build = { git = "https://github.com/uperl/rust-cpan-distribution-build.git", tag = "v0.2.1" }
 serde_json = { version = "1", features = ["preserve_order"] }
 
 

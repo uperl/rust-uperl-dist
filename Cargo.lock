@@ -129,8 +129,8 @@ dependencies = [
 
 [[package]]
 name = "cpan-distribution-build"
-version = "0.2.0"
-source = "git+https://github.com/uperl/rust-cpan-distribution-build.git?tag=v0.2.0#e3d508166daac3103bf100680a06245f49b36d5d"
+version = "0.2.1"
+source = "git+https://github.com/uperl/rust-cpan-distribution-build.git?tag=v0.2.1#8879cfd2edfb7e87b028cf8747d744bbdd31332a"
 dependencies = [
  "anyhow",
  "cpan-distribution-meta",
@@ -304,8 +304,8 @@ dependencies = [
 
 [[package]]
 name = "perl-wrapper"
-version = "0.1.1"
-source = "git+https://github.com/uperl/rust-perl-wrapper.git?tag=v0.1.1#8080aecb8f0c84669ac7192b667e94cdd9531ca6"
+version = "0.2.0"
+source = "git+https://github.com/uperl/rust-perl-wrapper.git?tag=v0.2.0#2bf2106bcb6b5b3afded522e20b0cb2ea6db620d"
 dependencies = [
  "anyhow",
  "os_pipe",
