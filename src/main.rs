@@ -133,6 +133,11 @@ enum Command {
         /// Don't print the resolved prerequisites after configuring.
         #[arg(long)]
         no_prereqs: bool,
+
+        /// Include `develop`-phase prerequisites in the table (skipped by
+        /// default; `--json` always includes them).
+        #[arg(long)]
+        include_develop: bool,
     },
 
     /// Run the build step: `make` or `perl Build`.
@@ -173,12 +178,15 @@ fn run(cli: Cli) -> Result<ExitCode> {
             print_pre_configure_prereqs(&dist.execute_pre_configure(), common.json)?;
             Ok(ExitCode::SUCCESS)
         }
-        Command::Configure { no_prereqs } => {
+        Command::Configure {
+            no_prereqs,
+            include_develop,
+        } => {
             let (result, deps) = dist
                 .execute_configure()
                 .context("the configure step could not be started")?;
             if !no_prereqs {
-                print_resolved_prereqs(&deps, common.json)?;
+                print_resolved_prereqs(&deps, common.json, include_develop)?;
             }
             Ok(exit_code_for("configure", &result))
         }
@@ -229,11 +237,15 @@ fn print_pre_configure_prereqs(deps: &[Dependency], as_json: bool) -> Result<()>
     Ok(())
 }
 
-/// Print the resolved prerequisites: a `phase` / `relationship` / `module` /
-/// `version` table, or, when `as_json`,
+/// Print the resolved prerequisites.
+///
+/// As JSON (`as_json`), always the full picture:
 /// `{ "prereqs": { "<phase>": [ { "relationship", "module", "version" }, ... ], ... } }`
 /// with every CPAN phase present as a key (empty phases map to `[]`).
-fn print_resolved_prereqs(deps: &Dependencies, as_json: bool) -> Result<()> {
+///
+/// As a table, a `phase` / `relationship` / `module` / `version` grid that omits
+/// the `develop` phase unless `include_develop` is set.
+fn print_resolved_prereqs(deps: &Dependencies, as_json: bool, include_develop: bool) -> Result<()> {
     let phases = [
         ("configure", &deps.configure),
         ("build", &deps.build),
@@ -252,7 +264,7 @@ fn print_resolved_prereqs(deps: &Dependencies, as_json: bool) -> Result<()> {
 
     let mut table = house_style_table();
     table.set_header(header_row(["phase", "relationship", "module", "version"]));
-    for (phase, relationship, dep) in flatten_prereqs(deps) {
+    for (phase, relationship, dep) in flatten_prereqs(deps, include_develop) {
         table.add_row([
             Cell::new(phase),
             Cell::new(relationship),
@@ -288,15 +300,21 @@ fn phase_entries(group: &PhaseDependencies) -> Vec<Value> {
 }
 
 /// Flatten [`Dependencies`] into `(phase, relationship, dependency)` triples in
-/// a stable phase-then-relationship order.
-fn flatten_prereqs(deps: &Dependencies) -> Vec<(&'static str, &'static str, &Dependency)> {
-    let phases = [
+/// a stable phase-then-relationship order. The `develop` phase is included only
+/// when `include_develop` is set.
+fn flatten_prereqs(
+    deps: &Dependencies,
+    include_develop: bool,
+) -> Vec<(&'static str, &'static str, &Dependency)> {
+    let mut phases = vec![
         ("configure", &deps.configure),
         ("build", &deps.build),
         ("test", &deps.test),
         ("runtime", &deps.runtime),
-        ("develop", &deps.develop),
     ];
+    if include_develop {
+        phases.push(("develop", &deps.develop));
+    }
 
     let mut out = Vec::new();
     for (phase, group) in phases {

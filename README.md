@@ -71,7 +71,9 @@ table, in the same style as `uperl-metacpan`:
 
 `configure` prints the resolved prerequisites — from `MYMETA` when the configure
 step wrote one, otherwise from `META` — as a `phase` / `relationship` / `module`
-/ `version` table. Pass `--no-prereqs` to suppress it.
+/ `version` table. Pass `--no-prereqs` to suppress it. The table omits the
+`develop` phase unless `--include-develop` is given; `--json` output always
+includes it.
 
 `--json` (`-j`) switches either table to a JSON object whose top-level
 `prereqs` key is an object keyed by phase:
