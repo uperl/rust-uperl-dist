@@ -18,8 +18,13 @@
 //! exit, never as a panic.
 //!
 //! `pre-configure` and `configure` also print the prerequisites they compute:
-//! by default as a `comfy-table` in the same house style as `uperl-metacpan`,
-//! or as JSON with `--json`.
+//! by default as a `comfy-table` in the same house style as `uperl-metacpan`.
+//!
+//! `--json` replaces all of that with a single JSON object on stdout: the
+//! child's captured, merged stdout+stderr under an `output` key (the empty
+//! string for `pre-configure`, which runs nothing), plus a `prereqs` object for
+//! `pre-configure` and `configure`. The child's output is captured rather than
+//! streamed in this mode, so stdout stays valid JSON.
 
 use std::io::IsTerminal;
 use std::path::PathBuf;
@@ -175,7 +180,16 @@ fn run(cli: Cli) -> Result<ExitCode> {
 
     match command {
         Command::PreConfigure => {
-            print_pre_configure_prereqs(&dist.execute_pre_configure(), common.json)?;
+            let deps = dist.execute_pre_configure();
+            if common.json {
+                // `pre-configure` runs nothing, so its captured output is empty.
+                print_json(&json!({
+                    "prereqs": pre_configure_prereqs_json(&deps),
+                    "output": "",
+                }))?;
+            } else {
+                print_pre_configure_table(&deps);
+            }
             Ok(ExitCode::SUCCESS)
         }
         Command::Configure {
@@ -185,23 +199,55 @@ fn run(cli: Cli) -> Result<ExitCode> {
             let (result, deps) = dist
                 .execute_configure()
                 .context("the configure step could not be started")?;
-            if !no_prereqs {
-                print_resolved_prereqs(&deps, common.json, include_develop)?;
+            if common.json {
+                let mut obj = serde_json::Map::new();
+                if !no_prereqs {
+                    obj.insert("prereqs".to_string(), resolved_prereqs_json(&deps));
+                }
+                obj.insert(
+                    "output".to_string(),
+                    Value::String(captured_output(&result)),
+                );
+                print_json(&Value::Object(obj))?;
+            } else if !no_prereqs {
+                print_resolved_prereqs_table(&deps, include_develop);
             }
             Ok(exit_code_for("configure", &result))
         }
-        Command::Build => Ok(exit_code_for("build", &dist.execute_build()?)),
-        Command::Test => Ok(exit_code_for("test", &dist.execute_test()?)),
-        Command::Install => Ok(exit_code_for("install", &dist.execute_install()?)),
+        Command::Build => finish_step("build", &common, dist.execute_build()?),
+        Command::Test => finish_step("test", &common, dist.execute_test()?),
+        Command::Install => finish_step("install", &common, dist.execute_install()?),
     }
 }
 
-/// Assemble the [`Perl`] wrapper from the shared options.
+/// Emit the JSON envelope for a bare build step when `--json` is set, then map
+/// the [`ExecuteResult`] to a process exit code.
+fn finish_step(step: &str, common: &CommonArgs, result: ExecuteResult) -> Result<ExitCode> {
+    if common.json {
+        print_json(&json!({ "output": captured_output(&result) }))?;
+    }
+    Ok(exit_code_for(step, &result))
+}
+
+/// The child's captured, merged stdout+stderr as a lossy UTF-8 string, or `""`
+/// when output was not captured (i.e. it went straight to the terminal).
+fn captured_output(result: &ExecuteResult) -> String {
+    result
+        .output_lossy()
+        .map(|text| text.into_owned())
+        .unwrap_or_default()
+}
+
+/// Assemble the [`Perl`] wrapper from the shared options. Command output is
+/// captured (rather than inherited) when `--json` is in effect, so it can be
+/// folded into the JSON envelope.
 fn build_perl(common: &CommonArgs) -> Result<Perl> {
     let mut perl = match &common.perl {
         Some(path) => Perl::with_perl(path),
         None => Perl::new().context("could not locate a `perl` interpreter on PATH")?,
     };
+
+    perl = perl.with_capture_output(common.json);
 
     if let Some(make) = &common.make {
         perl = perl.with_make(make);
@@ -216,36 +262,30 @@ fn build_perl(common: &CommonArgs) -> Result<Perl> {
     Ok(perl)
 }
 
-/// Print the pre-configure prerequisites: a `module` / `version` table, or, when
-/// `as_json`, `{ "prereqs": { "configure": [ { "module", "version" }, ... ] } }`
-/// (they are all configure-phase requirements).
-fn print_pre_configure_prereqs(deps: &[Dependency], as_json: bool) -> Result<()> {
-    if as_json {
-        let rows: Vec<Value> = deps
-            .iter()
-            .map(|d| json!({ "module": d.module, "version": d.version }))
-            .collect();
-        return print_json(&json!({ "prereqs": { "configure": rows } }));
-    }
+/// The pre-configure prerequisites as `{ "configure": [ { "module", "version" },
+/// ... ] }` — they are all configure-phase requirements.
+fn pre_configure_prereqs_json(deps: &[Dependency]) -> Value {
+    let rows: Vec<Value> = deps
+        .iter()
+        .map(|d| json!({ "module": d.module, "version": d.version }))
+        .collect();
+    json!({ "configure": rows })
+}
 
+/// Print the pre-configure prerequisites as a `module` / `version` table.
+fn print_pre_configure_table(deps: &[Dependency]) {
     let mut table = house_style_table();
     table.set_header(header_row(["module", "version"]));
     for dep in deps {
         table.add_row([Cell::new(&dep.module), Cell::new(&dep.version)]);
     }
     println!("{table}");
-    Ok(())
 }
 
-/// Print the resolved prerequisites.
-///
-/// As JSON (`as_json`), always the full picture:
-/// `{ "prereqs": { "<phase>": [ { "relationship", "module", "version" }, ... ], ... } }`
-/// with every CPAN phase present as a key (empty phases map to `[]`).
-///
-/// As a table, a `phase` / `relationship` / `module` / `version` grid that omits
-/// the `develop` phase unless `include_develop` is set.
-fn print_resolved_prereqs(deps: &Dependencies, as_json: bool, include_develop: bool) -> Result<()> {
+/// The resolved prerequisites as the full picture:
+/// `{ "<phase>": [ { "relationship", "module", "version" }, ... ], ... }` with
+/// every CPAN phase present as a key (empty phases map to `[]`).
+fn resolved_prereqs_json(deps: &Dependencies) -> Value {
     let phases = [
         ("configure", &deps.configure),
         ("build", &deps.build),
@@ -254,14 +294,16 @@ fn print_resolved_prereqs(deps: &Dependencies, as_json: bool, include_develop: b
         ("develop", &deps.develop),
     ];
 
-    if as_json {
-        let mut prereqs = serde_json::Map::new();
-        for (phase, group) in phases {
-            prereqs.insert(phase.to_string(), Value::Array(phase_entries(group)));
-        }
-        return print_json(&json!({ "prereqs": Value::Object(prereqs) }));
+    let mut prereqs = serde_json::Map::new();
+    for (phase, group) in phases {
+        prereqs.insert(phase.to_string(), Value::Array(phase_entries(group)));
     }
+    Value::Object(prereqs)
+}
 
+/// Print the resolved prerequisites as a `phase` / `relationship` / `module` /
+/// `version` table that omits the `develop` phase unless `include_develop` is set.
+fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool) {
     let mut table = house_style_table();
     table.set_header(header_row(["phase", "relationship", "module", "version"]));
     for (phase, relationship, dep) in flatten_prereqs(deps, include_develop) {
@@ -273,7 +315,6 @@ fn print_resolved_prereqs(deps: &Dependencies, as_json: bool, include_develop: b
         ]);
     }
     println!("{table}");
-    Ok(())
 }
 
 /// The `{ "relationship", "module", "version" }` entries of one phase, in a

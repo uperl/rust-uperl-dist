@@ -75,8 +75,17 @@ step wrote one, otherwise from `META` — as a `phase` / `relationship` / `modul
 `develop` phase unless `--include-develop` is given; `--json` output always
 includes it.
 
-`--json` (`-j`) switches either table to a JSON object whose top-level
-`prereqs` key is an object keyed by phase:
+`configure`, `build`, `test` and `install` pass `perl` / `make` output straight
+through and exit with the child's status; a failing step is a non-zero exit, not
+a panic.
+
+### `--json`
+
+`--json` (`-j`) works with every subcommand. It prints a single JSON object on
+stdout and nothing else — the child's output is captured rather than streamed,
+so stdout stays valid JSON. The object always has an `output` key holding the
+child's merged stdout+stderr (`""` for `pre-configure`, which runs nothing), and
+`pre-configure` / `configure` add a `prereqs` object keyed by phase:
 
 ```json
 {
@@ -86,13 +95,13 @@ includes it.
     "test": [ { "relationship": "requires", "module": "Test::More", "version": "0.88" } ],
     "runtime": [ { "relationship": "requires", "module": "perl", "version": "5.010" } ],
     "develop": []
-  }
+  },
+  "output": "Generating a Unix-style Makefile\n..."
 }
 ```
 
-`configure` emits all five CPAN phases (empty ones as `[]`); `pre-configure`
-emits only `configure`, and its entries are just `module` / `version`.
-
-`configure`, `build`, `test` and `install` pass `perl` / `make` output straight
-through and exit with the child's status; a failing step is a non-zero exit, not
-a panic.
+`configure` emits all five CPAN phases (empty ones as `[]`, `develop` always
+included regardless of `--include-develop`); `pre-configure` emits only
+`configure`, with `module` / `version` entries. `build`, `test` and `install`
+emit just `{ "output": ... }`. `--no-prereqs` drops the `prereqs` key from
+`configure`'s object.
