@@ -129,8 +129,8 @@ dependencies = [
 
 [[package]]
 name = "cpan-distribution-build"
-version = "0.1.1"
-source = "git+https://github.com/uperl/rust-cpan-distribution-build.git?tag=v0.1.1#bbe9b4efc63439cd333f712b53a680336246cecf"
+version = "0.2.0"
+source = "git+https://github.com/uperl/rust-cpan-distribution-build.git?tag=v0.2.0#e3d508166daac3103bf100680a06245f49b36d5d"
 dependencies = [
  "anyhow",
  "cpan-distribution-meta",
