@@ -61,8 +61,9 @@ uperl-dist --install-base ~/perl5 install
 MODULE<TAB>VERSION-RANGE
 ```
 
-`configure --show-prereqs` prints the resolved prerequisites — from `MYMETA`
-when the configure step wrote one, otherwise from `META` — as:
+`configure` prints the resolved prerequisites — from `MYMETA` when the configure
+step wrote one, otherwise from `META` — as the lines below; pass `--no-prereqs`
+to suppress them:
 
 ```
 PHASE<TAB>RELATIONSHIP<TAB>MODULE<TAB>VERSION-RANGE

@@ -112,12 +112,15 @@ enum Command {
     PreConfigure,
 
     /// Run the configure step: `perl Makefile.PL` or `perl Build.PL`.
+    ///
+    /// Afterwards the resolved prerequisites (taken from `MYMETA` when the
+    /// configure step wrote one, otherwise from `META`) are printed as
+    /// `PHASE<TAB>RELATIONSHIP<TAB>MODULE<TAB>VERSION-RANGE` lines, unless
+    /// `--no-prereqs` is given.
     Configure {
-        /// After configuring, print the resolved prerequisites (taken from
-        /// `MYMETA` when the configure step wrote one) as
-        /// `PHASE<TAB>RELATIONSHIP<TAB>MODULE<TAB>VERSION-RANGE` lines.
+        /// Don't print the resolved prerequisites after configuring.
         #[arg(long)]
-        show_prereqs: bool,
+        no_prereqs: bool,
     },
 
     /// Run the build step: `make` or `perl Build`.
@@ -158,11 +161,11 @@ fn run(cli: Cli) -> Result<ExitCode> {
             print_dependency_list(&dist.execute_pre_configure());
             Ok(ExitCode::SUCCESS)
         }
-        Command::Configure { show_prereqs } => {
+        Command::Configure { no_prereqs } => {
             let (result, deps) = dist
                 .execute_configure()
                 .context("the configure step could not be started")?;
-            if show_prereqs {
+            if !no_prereqs {
                 print_resolved_prereqs(&deps);
             }
             Ok(exit_code_for("configure", &result))
