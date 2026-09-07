@@ -34,6 +34,7 @@ Global options (accepted before or after the subcommand):
 | `--install-base <DIR>`    | install prefix, like `local::lib` / `INSTALL_BASE` |
 | `--lib <DIR>`             | directory to add to `PERL5LIB`; repeatable |
 | `--prefer <eumm\|mb>`     | build tool when both configure scripts exist (default `mb`) |
+| `-j`, `--json`            | print computed prerequisites as JSON instead of a table |
 
 `--install-base` and `--lib` affect the configure step's generated
 `Makefile` / `Build` script, so pass them to `configure` (and, harmlessly, to the
@@ -55,19 +56,25 @@ uperl-dist --install-base ~/perl5 install
 ### Output
 
 `pre-configure` prints the configure prerequisites (the distribution's
-`configure` requires plus the build tool itself), one per line:
+`configure` requires plus the build tool itself) as a `module` / `version`
+table, in the same style as `uperl-metacpan`:
 
 ```
-MODULE<TAB>VERSION-RANGE
+┌─────────────────────┬─────────┐
+│ module              ┆ version │
+╞═════════════════════╪═════════╡
+│ ExtUtils::MakeMaker ┆ 0       │
+├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┤
+│ File::Which         ┆ 1.09    │
+└─────────────────────┴─────────┘
 ```
 
 `configure` prints the resolved prerequisites — from `MYMETA` when the configure
-step wrote one, otherwise from `META` — as the lines below; pass `--no-prereqs`
-to suppress them:
+step wrote one, otherwise from `META` — as a `phase` / `relationship` / `module`
+/ `version` table. Pass `--no-prereqs` to suppress it.
 
-```
-PHASE<TAB>RELATIONSHIP<TAB>MODULE<TAB>VERSION-RANGE
-```
+`--json` (`-j`) switches either table to a JSON array of objects with the same
+fields.
 
 `configure`, `build`, `test` and `install` pass `perl` / `make` output straight
 through and exit with the child's status; a failing step is a non-zero exit, not
