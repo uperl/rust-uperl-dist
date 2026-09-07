@@ -131,15 +131,15 @@ impl From<Prefer> for BuildTool {
 enum Command {
     /// Print the prerequisites that must be installed before `configure` can run
     /// (the distribution's `configure` requires, plus the build tool itself), as
-    /// a `module` / `version` (required) / `installed` table. Nothing is executed.
+    /// a `module` / `required` / `installed` table. Nothing is executed.
     PreConfigure,
 
     /// Run the configure step: `perl Makefile.PL` or `perl Build.PL`.
     ///
     /// Afterwards the resolved prerequisites (taken from `MYMETA` when the
     /// configure step wrote one, otherwise from `META`) are printed as a
-    /// `phase` / `relationship` / `module` / `version` (required) / `installed`
-    /// table, unless `--no-prereqs` is given.
+    /// `phase` / `relationship` / `module` / `required` / `installed` table,
+    /// unless `--no-prereqs` is given.
     Configure {
         /// Don't print the resolved prerequisites after configuring.
         #[arg(long)]
@@ -297,11 +297,11 @@ fn pre_configure_prereqs_json(deps: &[Dependency]) -> Value {
     json!({ "configure": rows })
 }
 
-/// Print the pre-configure prerequisites as a `module` / `version` (required) /
+/// Print the pre-configure prerequisites as a `module` / `required` /
 /// `installed` table.
 fn print_pre_configure_table(deps: &[Dependency], perl: &Perl) {
     let mut table = house_style_table();
-    table.set_header(header_row(["module", "version", "installed"]));
+    table.set_header(header_row(["module", "required", "installed"]));
     for dep in deps {
         table.add_row([
             Cell::new(&dep.module),
@@ -332,7 +332,7 @@ fn resolved_prereqs_json(deps: &Dependencies) -> Value {
 }
 
 /// Print the resolved prerequisites as a `phase` / `relationship` / `module` /
-/// `version` (required) / `installed` table that omits the `develop` phase unless
+/// `required` / `installed` table that omits the `develop` phase unless
 /// `include_develop` is set.
 fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool, perl: &Perl) {
     let mut table = house_style_table();
@@ -340,7 +340,7 @@ fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool, perl
         "phase",
         "relationship",
         "module",
-        "version",
+        "required",
         "installed",
     ]));
     for (phase, relationship, dep) in flatten_prereqs(deps, include_develop) {

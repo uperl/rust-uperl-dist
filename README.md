@@ -67,18 +67,18 @@ interpreter's search path (`-` = not installed, `?` = installed but declares no
 version):
 
 ```
-┌─────────────────────┬─────────┬───────────┐
-│ module              ┆ version ┆ installed │
-╞═════════════════════╪═════════╪═══════════╡
-│ ExtUtils::MakeMaker ┆ 0       ┆ 7.76      │
-├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌┤
-│ File::Which         ┆ 1.09    ┆ 1.27      │
-└─────────────────────┴─────────┴───────────┘
+┌─────────────────────┬──────────┬───────────┐
+│ module              ┆ required ┆ installed │
+╞═════════════════════╪══════════╪═══════════╡
+│ ExtUtils::MakeMaker ┆ 0        ┆ 7.76      │
+├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌┤
+│ File::Which         ┆ 1.09     ┆ 1.27      │
+└─────────────────────┴──────────┴───────────┘
 ```
 
 `configure` prints the resolved prerequisites — from `MYMETA` when the configure
 step wrote one, otherwise from `META` — as a `phase` / `relationship` / `module`
-/ `version` / `installed` table. Pass `--no-prereqs` to suppress it. The table
+/ `required` / `installed` table. Pass `--no-prereqs` to suppress it. The table
 omits the `develop` phase unless `--include-develop` is given; `--json` output
 always includes it.
 
