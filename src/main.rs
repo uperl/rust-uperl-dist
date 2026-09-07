@@ -216,7 +216,7 @@ fn print_pre_configure_prereqs(deps: &[Dependency], as_json: bool) -> Result<()>
             .iter()
             .map(|d| json!({ "module": d.module, "version": d.version }))
             .collect();
-        return print_json(&Value::Array(rows));
+        return print_json(&json!({ "prereqs": rows }));
     }
 
     let mut table = house_style_table();
@@ -245,7 +245,7 @@ fn print_resolved_prereqs(deps: &Dependencies, as_json: bool) -> Result<()> {
                 })
             })
             .collect();
-        return print_json(&Value::Array(rows));
+        return print_json(&json!({ "prereqs": rows }));
     }
 
     let mut table = house_style_table();

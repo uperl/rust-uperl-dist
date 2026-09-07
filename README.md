@@ -73,8 +73,8 @@ table, in the same style as `uperl-metacpan`:
 step wrote one, otherwise from `META` — as a `phase` / `relationship` / `module`
 / `version` table. Pass `--no-prereqs` to suppress it.
 
-`--json` (`-j`) switches either table to a JSON array of objects with the same
-fields.
+`--json` (`-j`) switches either table to a JSON object with a top-level
+`prereqs` array whose entries carry the same fields as the table columns.
 
 `configure`, `build`, `test` and `install` pass `perl` / `make` output straight
 through and exit with the child's status; a failing step is a non-zero exit, not
