@@ -24,7 +24,8 @@
 //! with an `installed` column giving each module's version on `dist.perl`'s
 //! search path (`-` when it is not installed, `?` when it declares no version).
 //! A module whose installed version does not satisfy the requirement gets a `*`
-//! after its name, with a legend line under the table. This flag is table-only.
+//! after its name (and a red `module` / `installed` cell when colour is on),
+//! with a legend line under the table. This flag is table-only.
 //!
 //! `--json` replaces all of that with a single JSON object on stdout: the
 //! child's captured, merged stdout+stderr under `output` (the empty string for
@@ -39,7 +40,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use comfy_table::{Attribute, Cell, ContentArrangement, Table, presets::UTF8_FULL};
+use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table, presets::UTF8_FULL};
 use cpan_distribution_build::{
     BuildTool, Dependencies, Dependency, Distribution, ExecuteResult, Perl, PhaseDependencies,
 };
@@ -301,18 +302,21 @@ fn pre_configure_prereqs_json(deps: &[Dependency]) -> Value {
 
 /// Print the pre-configure prerequisites as a `module` / `required` /
 /// `installed` table. A module whose installed version does not satisfy the
-/// requirement (including "not installed") gets a `*` after its name.
+/// requirement (including "not installed") gets a `*` after its name and, when
+/// colour is enabled, a red `module` / `installed` cell.
 fn print_pre_configure_table(deps: &[Dependency], perl: &Perl) {
+    let color = use_color();
     let mut table = house_style_table();
     table.set_header(header_row(["module", "required", "installed"]));
     let mut any_unmet = false;
     for dep in deps {
         let (installed, satisfied) = installed_status(perl, dep);
         any_unmet |= !satisfied;
+        let unmet = !satisfied && color;
         table.add_row([
-            Cell::new(module_cell(&dep.module, satisfied)),
+            red_if(Cell::new(module_cell(&dep.module, satisfied)), unmet),
             Cell::new(&dep.version),
-            Cell::new(installed),
+            red_if(Cell::new(installed), unmet),
         ]);
     }
     println!("{table}");
@@ -341,8 +345,10 @@ fn resolved_prereqs_json(deps: &Dependencies) -> Value {
 /// Print the resolved prerequisites as a `phase` / `relationship` / `module` /
 /// `required` / `installed` table that omits the `develop` phase unless
 /// `include_develop` is set. A module whose installed version does not satisfy
-/// the requirement (including "not installed") gets a `*` after its name.
+/// the requirement (including "not installed") gets a `*` after its name and,
+/// when colour is enabled, a red `module` / `installed` cell.
 fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool, perl: &Perl) {
+    let color = use_color();
     let mut table = house_style_table();
     table.set_header(header_row([
         "phase",
@@ -360,9 +366,9 @@ fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool, perl
         table.add_row([
             Cell::new(phase),
             Cell::new(relationship),
-            Cell::new(module_cell(&dep.module, !flag)),
+            red_if(Cell::new(module_cell(&dep.module, !flag)), flag && color),
             Cell::new(&dep.version),
-            Cell::new(installed),
+            red_if(Cell::new(installed), flag && color),
         ]);
     }
     println!("{table}");
@@ -418,13 +424,25 @@ fn interpreter_version(perl: &Perl) -> Option<String> {
     (!version.is_empty()).then_some(version)
 }
 
-/// A `module` cell: the name, with a trailing ` *` when `satisfied` is false.
+/// A `module` cell's text: the name, with a trailing ` *` when `satisfied` is
+/// false.
 fn module_cell(name: &str, satisfied: bool) -> String {
     if satisfied {
         name.to_string()
     } else {
         format!("{name} *")
     }
+}
+
+/// Paint `cell` red when `red` is set, otherwise leave it as is.
+fn red_if(cell: Cell, red: bool) -> Cell {
+    if red { cell.fg(Color::Red) } else { cell }
+}
+
+/// Whether to emit ANSI colour in table output: stdout is a terminal and
+/// `NO_COLOR` is unset.
+fn use_color() -> bool {
+    std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none()
 }
 
 /// Print the `*` legend under a table when it flagged at least one row.
@@ -615,7 +633,7 @@ fn house_style_table() -> Table {
 
 /// Header cells, emphasised when stdout is a terminal.
 fn header_row<'a>(cells: impl IntoIterator<Item = &'a str>) -> Vec<Cell> {
-    let bold = std::io::stdout().is_terminal();
+    let bold = use_color();
     cells
         .into_iter()
         .map(|c| {

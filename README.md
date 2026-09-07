@@ -65,8 +65,9 @@ uperl-dist distclean                     # also remove the generated Makefile / 
 `uperl-metacpan`, with the required range next to the version found on the
 interpreter's search path (`-` = not installed, `?` = installed but declares no
 version). A module is marked with a trailing `*` when its installed version does
-not satisfy the required range (including when it is absent), and a legend line
-is printed under the table:
+not satisfy the required range (including when it is absent) — and its `module` /
+`installed` cells are shown in red when colour is enabled (stdout is a terminal
+and `NO_COLOR` is unset) — with a legend line printed under the table:
 
 ```
 ┌───────────────────────┬──────────┬───────────┐
