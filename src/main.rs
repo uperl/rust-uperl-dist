@@ -24,8 +24,8 @@
 //! with an `installed` column giving each module's version on `dist.perl`'s
 //! search path (`-` when it is not installed, `?` when it declares no version).
 //! A module whose installed version does not satisfy the requirement gets a `*`
-//! after its name (and a red `module` / `installed` cell when colour is on),
-//! with a legend line under the table. This flag is table-only.
+//! after its name (and a white-on-red `module` / `installed` cell when colour
+//! is on), with a legend line under the table. This flag is table-only.
 //!
 //! `--json` replaces all of that with a single JSON object on stdout: the
 //! child's captured, merged stdout+stderr under `output` (the empty string for
@@ -303,7 +303,7 @@ fn pre_configure_prereqs_json(deps: &[Dependency]) -> Value {
 /// Print the pre-configure prerequisites as a `module` / `required` /
 /// `installed` table. A module whose installed version does not satisfy the
 /// requirement (including "not installed") gets a `*` after its name and, when
-/// colour is enabled, a red `module` / `installed` cell.
+/// colour is enabled, a white-on-red `module` / `installed` cell.
 fn print_pre_configure_table(deps: &[Dependency], perl: &Perl) {
     let color = use_color();
     let mut table = house_style_table();
@@ -346,7 +346,7 @@ fn resolved_prereqs_json(deps: &Dependencies) -> Value {
 /// `required` / `installed` table that omits the `develop` phase unless
 /// `include_develop` is set. A module whose installed version does not satisfy
 /// the requirement (including "not installed") gets a `*` after its name and,
-/// when colour is enabled, a red `module` / `installed` cell.
+/// when colour is enabled, a white-on-red `module` / `installed` cell.
 fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool, perl: &Perl) {
     let color = use_color();
     let mut table = house_style_table();
@@ -434,9 +434,14 @@ fn module_cell(name: &str, satisfied: bool) -> String {
     }
 }
 
-/// Paint `cell` red when `red` is set, otherwise leave it as is.
+/// Give `cell` a red background with white text when `red` is set, otherwise
+/// leave it as is.
 fn red_if(cell: Cell, red: bool) -> Cell {
-    if red { cell.fg(Color::Red) } else { cell }
+    if red {
+        cell.fg(Color::White).bg(Color::Red)
+    } else {
+        cell
+    }
 }
 
 /// Whether to emit ANSI colour in table output: stdout is a terminal and

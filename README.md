@@ -66,8 +66,8 @@ uperl-dist distclean                     # also remove the generated Makefile / 
 interpreter's search path (`-` = not installed, `?` = installed but declares no
 version). A module is marked with a trailing `*` when its installed version does
 not satisfy the required range (including when it is absent) — and its `module` /
-`installed` cells are shown in red when colour is enabled (stdout is a terminal
-and `NO_COLOR` is unset) — with a legend line printed under the table:
+`installed` cells are shown white-on-red when colour is enabled (stdout is a
+terminal and `NO_COLOR` is unset) — with a legend line printed under the table:
 
 ```
 ┌───────────────────────┬──────────┬───────────┐
