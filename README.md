@@ -6,13 +6,15 @@ distribution one step at a time, on top of
 
 Each subcommand runs one phase and exits with that phase's status:
 
-| subcommand      | `ExtUtils::MakeMaker` | `Module::Build`      |
-|-----------------|-----------------------|----------------------|
+| subcommand      | `ExtUtils::MakeMaker` | `Module::Build`        |
+|-----------------|-----------------------|------------------------|
 | `pre-configure` | list configure prereqs (nothing is run) | list configure prereqs |
-| `configure`     | `perl Makefile.PL`    | `perl Build.PL`      |
-| `build`         | `make`                | `perl Build`         |
-| `test`          | `make test`           | `perl Build test`    |
-| `install`       | `make install`        | `perl Build install` |
+| `configure`     | `perl Makefile.PL`    | `perl Build.PL`        |
+| `build`         | `make`                | `perl Build`           |
+| `test`          | `make test`           | `perl Build test`      |
+| `install`       | `make install`        | `perl Build install`   |
+| `clean`         | `make clean`          | `perl Build clean`     |
+| `distclean`     | `make distclean`      | `perl Build distclean` |
 
 The build tool is picked from the scripts present in the distribution directory;
 when it ships both `Makefile.PL` and `Build.PL`, `--prefer` decides (default
@@ -51,6 +53,9 @@ uperl-dist --install-base ~/perl5 configure
 uperl-dist --install-base ~/perl5 build
 uperl-dist --install-base ~/perl5 test
 uperl-dist --install-base ~/perl5 install
+
+uperl-dist clean                         # remove build products
+uperl-dist distclean                     # also remove the generated Makefile / Build
 ```
 
 ### Output
@@ -75,9 +80,9 @@ step wrote one, otherwise from `META` — as a `phase` / `relationship` / `modul
 `develop` phase unless `--include-develop` is given; `--json` output always
 includes it.
 
-`configure`, `build`, `test` and `install` pass `perl` / `make` output straight
-through and exit with the child's status; a failing step is a non-zero exit, not
-a panic.
+Every subcommand except `pre-configure` passes `perl` / `make` output straight
+through and exits with the child's status; a failing step is a non-zero exit,
+not a panic.
 
 ### `--json`
 
@@ -106,5 +111,6 @@ add a `prereqs` object keyed by phase:
 `configure` emits all five CPAN phases (empty ones as `[]`, `develop` always
 included regardless of `--include-develop`); `pre-configure` emits only
 `configure`, with `module` / `version` entries, and always reports `exit` 0 /
-`success` true. `build`, `test` and `install` emit just `output` / `exit` /
-`success`. `--no-prereqs` drops the `prereqs` key from `configure`'s object.
+`success` true. `build`, `test`, `install`, `clean` and `distclean` emit just
+`output` / `exit` / `success`. `--no-prereqs` drops the `prereqs` key from
+`configure`'s object.

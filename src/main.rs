@@ -4,18 +4,20 @@
 //! Each subcommand maps to one phase of
 //! [`cpan_distribution_build::Distribution`]:
 //!
-//! | subcommand      | EUMM                | Module::Build        |
-//! |-----------------|---------------------|----------------------|
-//! | `pre-configure` | list configure deps | list configure deps  |
-//! | `configure`     | `perl Makefile.PL`  | `perl Build.PL`      |
-//! | `build`         | `make`              | `perl Build`         |
-//! | `test`          | `make test`         | `perl Build test`    |
-//! | `install`       | `make install`      | `perl Build install` |
+//! | subcommand      | EUMM                 | Module::Build          |
+//! |-----------------|----------------------|------------------------|
+//! | `pre-configure` | list configure deps  | list configure deps    |
+//! | `configure`     | `perl Makefile.PL`   | `perl Build.PL`        |
+//! | `build`         | `make`               | `perl Build`           |
+//! | `test`          | `make test`          | `perl Build test`      |
+//! | `install`       | `make install`       | `perl Build install`   |
+//! | `clean`         | `make clean`         | `perl Build clean`     |
+//! | `distclean`     | `make distclean`     | `perl Build distclean` |
 //!
-//! `configure`, `build`, `test` and `install` let the child's output through to
-//! this process's stdout/stderr and exit with the child's status. `perl` and
-//! `make` output is therefore live; a failing step is reported as a non-zero
-//! exit, never as a panic.
+//! Every step but `pre-configure` lets the child's output through to this
+//! process's stdout/stderr and exits with the child's status. `perl` and `make`
+//! output is therefore live; a failing step is reported as a non-zero exit,
+//! never as a panic.
 //!
 //! `pre-configure` and `configure` also print the prerequisites they compute:
 //! by default as a `comfy-table` in the same house style as `uperl-metacpan`.
@@ -155,6 +157,13 @@ enum Command {
 
     /// Install the built distribution: `make install` or `perl Build install`.
     Install,
+
+    /// Remove build products: `make clean` or `perl Build clean`.
+    Clean,
+
+    /// Remove build products and the generated `Makefile` / `Build` script:
+    /// `make distclean` or `perl Build distclean`.
+    Distclean,
 }
 
 fn main() -> ExitCode {
@@ -224,6 +233,8 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Command::Build => finish_step("build", &common, dist.execute_build()?),
         Command::Test => finish_step("test", &common, dist.execute_test()?),
         Command::Install => finish_step("install", &common, dist.execute_install()?),
+        Command::Clean => finish_step("clean", &common, dist.execute_clean()?),
+        Command::Distclean => finish_step("distclean", &common, dist.execute_distclean()?),
     }
 }
 
