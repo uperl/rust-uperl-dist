@@ -29,7 +29,7 @@ use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use comfy_table::{Attribute, Cell, ContentArrangement, Table, presets::UTF8_FULL};
 use cpan_distribution_build::{
-    BuildTool, Dependencies, Dependency, Distribution, ExecuteResult, Perl,
+    BuildTool, Dependencies, Dependency, Distribution, ExecuteResult, Perl, PhaseDependencies,
 };
 use serde_json::{Value, json};
 
@@ -208,15 +208,16 @@ fn build_perl(common: &CommonArgs) -> Result<Perl> {
     Ok(perl)
 }
 
-/// Print the pre-configure prerequisites: a `module` / `version` table, or a
-/// JSON array of `{ "module", "version" }` objects when `as_json`.
+/// Print the pre-configure prerequisites: a `module` / `version` table, or, when
+/// `as_json`, `{ "prereqs": { "configure": [ { "module", "version" }, ... ] } }`
+/// (they are all configure-phase requirements).
 fn print_pre_configure_prereqs(deps: &[Dependency], as_json: bool) -> Result<()> {
     if as_json {
         let rows: Vec<Value> = deps
             .iter()
             .map(|d| json!({ "module": d.module, "version": d.version }))
             .collect();
-        return print_json(&json!({ "prereqs": rows }));
+        return print_json(&json!({ "prereqs": { "configure": rows } }));
     }
 
     let mut table = house_style_table();
@@ -229,28 +230,29 @@ fn print_pre_configure_prereqs(deps: &[Dependency], as_json: bool) -> Result<()>
 }
 
 /// Print the resolved prerequisites: a `phase` / `relationship` / `module` /
-/// `version` table, or a JSON array of the same fields when `as_json`.
+/// `version` table, or, when `as_json`,
+/// `{ "prereqs": { "<phase>": [ { "relationship", "module", "version" }, ... ], ... } }`
+/// with every CPAN phase present as a key (empty phases map to `[]`).
 fn print_resolved_prereqs(deps: &Dependencies, as_json: bool) -> Result<()> {
-    let rows = flatten_prereqs(deps);
+    let phases = [
+        ("configure", &deps.configure),
+        ("build", &deps.build),
+        ("test", &deps.test),
+        ("runtime", &deps.runtime),
+        ("develop", &deps.develop),
+    ];
 
     if as_json {
-        let rows: Vec<Value> = rows
-            .iter()
-            .map(|(phase, relationship, dep)| {
-                json!({
-                    "phase": phase,
-                    "relationship": relationship,
-                    "module": dep.module,
-                    "version": dep.version,
-                })
-            })
-            .collect();
-        return print_json(&json!({ "prereqs": rows }));
+        let mut prereqs = serde_json::Map::new();
+        for (phase, group) in phases {
+            prereqs.insert(phase.to_string(), Value::Array(phase_entries(group)));
+        }
+        return print_json(&json!({ "prereqs": Value::Object(prereqs) }));
     }
 
     let mut table = house_style_table();
     table.set_header(header_row(["phase", "relationship", "module", "version"]));
-    for (phase, relationship, dep) in rows {
+    for (phase, relationship, dep) in flatten_prereqs(deps) {
         table.add_row([
             Cell::new(phase),
             Cell::new(relationship),
@@ -260,6 +262,29 @@ fn print_resolved_prereqs(deps: &Dependencies, as_json: bool) -> Result<()> {
     }
     println!("{table}");
     Ok(())
+}
+
+/// The `{ "relationship", "module", "version" }` entries of one phase, in a
+/// stable relationship-then-module order.
+fn phase_entries(group: &PhaseDependencies) -> Vec<Value> {
+    let relationships = [
+        ("requires", &group.requires),
+        ("recommends", &group.recommends),
+        ("suggests", &group.suggests),
+        ("conflicts", &group.conflicts),
+    ];
+
+    let mut out = Vec::new();
+    for (relationship, list) in relationships {
+        for dep in list {
+            out.push(json!({
+                "relationship": relationship,
+                "module": dep.module,
+                "version": dep.version,
+            }));
+        }
+    }
+    out
 }
 
 /// Flatten [`Dependencies`] into `(phase, relationship, dependency)` triples in

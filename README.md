@@ -73,8 +73,23 @@ table, in the same style as `uperl-metacpan`:
 step wrote one, otherwise from `META` — as a `phase` / `relationship` / `module`
 / `version` table. Pass `--no-prereqs` to suppress it.
 
-`--json` (`-j`) switches either table to a JSON object with a top-level
-`prereqs` array whose entries carry the same fields as the table columns.
+`--json` (`-j`) switches either table to a JSON object whose top-level
+`prereqs` key is an object keyed by phase:
+
+```json
+{
+  "prereqs": {
+    "configure": [ { "relationship": "requires", "module": "ExtUtils::MakeMaker", "version": "0" } ],
+    "build": [],
+    "test": [ { "relationship": "requires", "module": "Test::More", "version": "0.88" } ],
+    "runtime": [ { "relationship": "requires", "module": "perl", "version": "5.010" } ],
+    "develop": []
+  }
+}
+```
+
+`configure` emits all five CPAN phases (empty ones as `[]`); `pre-configure`
+emits only `configure`, and its entries are just `module` / `version`.
 
 `configure`, `build`, `test` and `install` pass `perl` / `make` output straight
 through and exit with the child's status; a failing step is a non-zero exit, not
