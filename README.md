@@ -61,24 +61,28 @@ uperl-dist distclean                     # also remove the generated Makefile / 
 ### Output
 
 `pre-configure` prints the configure prerequisites (the distribution's
-`configure` requires plus the build tool itself) as a `module` / `version`
-table, in the same style as `uperl-metacpan`:
+`configure` requires plus the build tool itself) as a table in the same style as
+`uperl-metacpan`, with the required range next to the version found on the
+interpreter's search path (`-` = not installed, `?` = installed but declares no
+version):
 
 ```
-┌─────────────────────┬─────────┐
-│ module              ┆ version │
-╞═════════════════════╪═════════╡
-│ ExtUtils::MakeMaker ┆ 0       │
-├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┤
-│ File::Which         ┆ 1.09    │
-└─────────────────────┴─────────┘
+┌─────────────────────┬─────────┬───────────┐
+│ module              ┆ version ┆ installed │
+╞═════════════════════╪═════════╪═══════════╡
+│ ExtUtils::MakeMaker ┆ 0       ┆ 7.76      │
+├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌┤
+│ File::Which         ┆ 1.09    ┆ 1.27      │
+└─────────────────────┴─────────┴───────────┘
 ```
 
 `configure` prints the resolved prerequisites — from `MYMETA` when the configure
 step wrote one, otherwise from `META` — as a `phase` / `relationship` / `module`
-/ `version` table. Pass `--no-prereqs` to suppress it. The table omits the
-`develop` phase unless `--include-develop` is given; `--json` output always
-includes it.
+/ `version` / `installed` table. Pass `--no-prereqs` to suppress it. The table
+omits the `develop` phase unless `--include-develop` is given; `--json` output
+always includes it.
+
+The `installed` column is table-only; `--json` output is unchanged.
 
 Every subcommand except `pre-configure` passes `perl` / `make` output straight
 through and exits with the child's status; a failing step is a non-zero exit,

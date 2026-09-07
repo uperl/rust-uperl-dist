@@ -20,7 +20,9 @@
 //! never as a panic.
 //!
 //! `pre-configure` and `configure` also print the prerequisites they compute:
-//! by default as a `comfy-table` in the same house style as `uperl-metacpan`.
+//! by default as a `comfy-table` in the same house style as `uperl-metacpan`,
+//! with an `installed` column giving each module's version on `dist.perl`'s
+//! search path (`-` when it is not installed, `?` when it declares no version).
 //!
 //! `--json` replaces all of that with a single JSON object on stdout: the
 //! child's captured, merged stdout+stderr under `output` (the empty string for
@@ -129,15 +131,15 @@ impl From<Prefer> for BuildTool {
 enum Command {
     /// Print the prerequisites that must be installed before `configure` can run
     /// (the distribution's `configure` requires, plus the build tool itself), as
-    /// a `module` / `version` table. Nothing is executed.
+    /// a `module` / `version` (required) / `installed` table. Nothing is executed.
     PreConfigure,
 
     /// Run the configure step: `perl Makefile.PL` or `perl Build.PL`.
     ///
     /// Afterwards the resolved prerequisites (taken from `MYMETA` when the
     /// configure step wrote one, otherwise from `META`) are printed as a
-    /// `phase` / `relationship` / `module` / `version` table, unless
-    /// `--no-prereqs` is given.
+    /// `phase` / `relationship` / `module` / `version` (required) / `installed`
+    /// table, unless `--no-prereqs` is given.
     Configure {
         /// Don't print the resolved prerequisites after configuring.
         #[arg(long)]
@@ -201,7 +203,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
                     "success": true,
                 }))?;
             } else {
-                print_pre_configure_table(&deps);
+                print_pre_configure_table(&deps, &dist.perl);
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -226,7 +228,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 obj.insert("success".to_string(), json!(result.is_success));
                 print_json(&Value::Object(obj))?;
             } else if !no_prereqs {
-                print_resolved_prereqs_table(&deps, include_develop);
+                print_resolved_prereqs_table(&deps, include_develop, &dist.perl);
             }
             Ok(ExitCode::from(code))
         }
@@ -295,12 +297,17 @@ fn pre_configure_prereqs_json(deps: &[Dependency]) -> Value {
     json!({ "configure": rows })
 }
 
-/// Print the pre-configure prerequisites as a `module` / `version` table.
-fn print_pre_configure_table(deps: &[Dependency]) {
+/// Print the pre-configure prerequisites as a `module` / `version` (required) /
+/// `installed` table.
+fn print_pre_configure_table(deps: &[Dependency], perl: &Perl) {
     let mut table = house_style_table();
-    table.set_header(header_row(["module", "version"]));
+    table.set_header(header_row(["module", "version", "installed"]));
     for dep in deps {
-        table.add_row([Cell::new(&dep.module), Cell::new(&dep.version)]);
+        table.add_row([
+            Cell::new(&dep.module),
+            Cell::new(&dep.version),
+            Cell::new(installed_version(perl, &dep.module)),
+        ]);
     }
     println!("{table}");
 }
@@ -325,19 +332,37 @@ fn resolved_prereqs_json(deps: &Dependencies) -> Value {
 }
 
 /// Print the resolved prerequisites as a `phase` / `relationship` / `module` /
-/// `version` table that omits the `develop` phase unless `include_develop` is set.
-fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool) {
+/// `version` (required) / `installed` table that omits the `develop` phase unless
+/// `include_develop` is set.
+fn print_resolved_prereqs_table(deps: &Dependencies, include_develop: bool, perl: &Perl) {
     let mut table = house_style_table();
-    table.set_header(header_row(["phase", "relationship", "module", "version"]));
+    table.set_header(header_row([
+        "phase",
+        "relationship",
+        "module",
+        "version",
+        "installed",
+    ]));
     for (phase, relationship, dep) in flatten_prereqs(deps, include_develop) {
         table.add_row([
             Cell::new(phase),
             Cell::new(relationship),
             Cell::new(&dep.module),
             Cell::new(&dep.version),
+            Cell::new(installed_version(perl, &dep.module)),
         ]);
     }
     println!("{table}");
+}
+
+/// The version of `module` installed on `perl`'s module search path, for the
+/// table's `installed` column: the `$VERSION` declared in its source, `"?"` when
+/// it is installed but declares none, or `"-"` when it is not installed.
+fn installed_version(perl: &Perl, module: &str) -> String {
+    match perl.module(module) {
+        Some(found) => found.version.unwrap_or_else(|| "?".to_string()),
+        None => "-".to_string(),
+    }
 }
 
 /// The `{ "relationship", "module", "version" }` entries of one phase, in a
